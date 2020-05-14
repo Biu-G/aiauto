@@ -6,6 +6,7 @@ import random
 import numpy as np
 from collections import deque
 import os
+import _thread
 GAME = "stuntcat"
 ACTIONS = 8
 GAMMA = 0.87
@@ -77,6 +78,7 @@ class Gambling:
         return self.s, readout
 
     def __init__(self):
+        self.start_training = False
         self.readout_t = [0 for _ in range(ACTIONS)]
         self.sess = tf.InteractiveSession()
         self.t = 0
@@ -89,6 +91,35 @@ class Gambling:
         self.train_step = tf.train.AdamOptimizer(1e-6).minimize(cost)
         self.D = deque()
         self.stack_first = False
+
+    def training(self):
+        while True:
+            # sample a minibatch to train on
+            minibatch = random.sample(self.D, BATCH)
+
+            # get the batch variables
+            s_j_batch = [d[0] for d in minibatch]
+            a_batch = [d[1] for d in minibatch]
+            r_batch = [d[2] for d in minibatch]
+            s_j1_batch = [d[3] for d in minibatch]
+
+            y_batch = []
+            readout_j1_batch = self.readout.eval(feed_dict={self.s: s_j1_batch})
+            for i in range(0, len(minibatch)):
+                # if terminal, only equals reward
+                if r_batch[i] < 0:
+                    y_batch.append(r_batch[i])
+                else:
+                    y_batch.append(r_batch[i] + GAMMA * np.max(readout_j1_batch[i]))
+
+            # perform gradient step
+            self.train_step.run(feed_dict={
+                self.y: y_batch,
+                self.a: a_batch,
+                self.s: s_j_batch}
+            )
+
+
 
     def stacker(self, image_data):
         self.t += 1
@@ -145,31 +176,10 @@ class Gambling:
                 self.D.popleft()
 
             # only train if done observing
-            if self.t > OBSERVE:
-                # sample a minibatch to train on
-                minibatch = random.sample(self.D, BATCH)
+            if self.t > OBSERVE and self.start_training == False:
+                self.start_training = True
+                _thread.start_new_thread(self.training, ())
 
-                # get the batch variables
-                s_j_batch = [d[0] for d in minibatch]
-                a_batch = [d[1] for d in minibatch]
-                r_batch = [d[2] for d in minibatch]
-                s_j1_batch = [d[3] for d in minibatch]
-
-                y_batch = []
-                readout_j1_batch = self.readout.eval(feed_dict={self.s: s_j1_batch})
-                for i in range(0, len(minibatch)):
-                    # if terminal, only equals reward
-                    if r_batch[i] < 0:
-                        y_batch.append(r_batch[i])
-                    else:
-                        y_batch.append(r_batch[i] + GAMMA * np.max(readout_j1_batch[i]))
-
-                # perform gradient step
-                self.train_step.run(feed_dict={
-                    self.y: y_batch,
-                    self.a: a_batch,
-                    self.s: s_j_batch}
-                )
 
             # update the old values
             self.s_t = s_t1

@@ -93,13 +93,14 @@ class Game:
                     if not i.event(event):
                         break
 
-    def mainloop(self):
+    def mainloop(self, ai):
         """
         Handle the game mainloop until self.running is set to
         a falsey value. Usually form pygame.QUIT.
         """
 
         dt = 0
+        intogame = False
         while self.running:
             fs = time.time()
             ticker = self.tick(dt)
@@ -107,7 +108,14 @@ class Game:
             renderer = self.render()
             #events = pygame.event.get()
             #self.gambling.say()
-            events = self.gambling.fight(renderer, ticker)
+            #events = self.gambling.fight(renderer, ticker)
+            if ai=="ai":
+                events = self.gambling.fight(renderer, ticker)
+            else:
+                events = pygame.event.get()
+                if intogame == False:
+                    events.append(pygame.event.Event(pygame.KEYDOWN, {"key":pygame.K_LEFT, "mod":0, "unicode":u' '}))
+                    intogame = True
             self.events(events)
             dt = (time.time() - fs) * 1000
             if self.gifmaker is not None:
